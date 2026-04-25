@@ -456,7 +456,12 @@ import os
 MODEL_NAME       = "unsloth/Meta-Llama-3.1-8B-Instruct-bnb-4bit"
 GROUP_SIZE       = 2
 LEARNING_RATE    = 5e-6
-KL_BETA          = 0.04
+# KL_BETA = 0.0 -> SKIP reference model load (saves ~5 GB VRAM on T4).
+# T4 only has 15 GB and one 4-bit Llama-3.1-8B + LoRA + activations + gradients
+# already eats ~10 GB; loading a second 4-bit copy as the KL reference OOMs
+# the GRPO backward pass. Set this to 0.04 only if you've upgraded to an
+# A100 / H100 with >= 24 GB VRAM.
+KL_BETA          = 0.0
 OUTPUT_DIR       = "/kaggle/working/er_map_grpo_checkpoints"
 PUSH_EVERY_EPS   = 20
 USE_WANDB        = False  # WANDB conflicts with protobuf 7 on Kaggle base image

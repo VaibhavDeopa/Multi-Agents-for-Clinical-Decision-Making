@@ -560,6 +560,8 @@ def manual_grpo_step(
     total_kl = 0.0
     n_steps = 0
 
+    use_kl = (ref_model is not None) and (beta > 0.0)
+
     for traj_idx, traj in enumerate(trajectories):
         adv = advantages[traj_idx]
         for prompt, response in zip(traj["prompts"], traj["responses"]):
@@ -569,21 +571,24 @@ def manual_grpo_step(
             if n_tok == 0:
                 continue
 
-            with torch.no_grad():
-                logp_ref, _ = _response_logprob(
-                    ref_model, tokenizer, prompt, response, device
-                )
-
-            # Length-normalize so long responses don't dominate.
             logp_pi_norm = logp_pi / max(n_tok, 1)
-            logp_ref_norm = logp_ref / max(n_tok, 1)
-
             policy_term = -(adv * logp_pi_norm)
-            kl_term = (logp_pi_norm - logp_ref_norm).pow(2)
-            step_loss = policy_term + beta * kl_term
+
+            if use_kl:
+                with torch.no_grad():
+                    logp_ref, _ = _response_logprob(
+                        ref_model, tokenizer, prompt, response, device
+                    )
+                logp_ref_norm = logp_ref / max(n_tok, 1)
+                kl_term = (logp_pi_norm - logp_ref_norm).pow(2)
+                step_loss = policy_term + beta * kl_term
+                total_kl += float(
+                    (logp_pi_norm - logp_ref_norm).abs().detach().item()
+                )
+            else:
+                step_loss = policy_term
 
             total_loss = total_loss + step_loss
-            total_kl += float((logp_pi_norm - logp_ref_norm).abs().detach().item())
             n_steps += 1
 
     if n_steps == 0:
@@ -753,7 +758,18 @@ def train(
         model, tokenizer = load_model_and_tokenizer(model_name=model_name)
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
-        ref_model = load_reference_model(model_name)
+        # Reference model is only needed if KL regularization is on. Loading
+        # it costs ~5 GB of VRAM (a second 4-bit copy of the 8B base), which
+        # OOMs the T4 once activations + gradients are added. Skip it when
+        # kl_beta <= 0 — GRPO works fine without KL on short runs.
+        if kl_beta > 0.0:
+            ref_model = load_reference_model(model_name)
+        else:
+            ref_model = None
+            logger.info(
+                "kl_beta <= 0 -> skipping reference model load "
+                "(saves ~5 GB VRAM; GRPO loss will use pure advantage term)"
+            )
         trainable = [p for p in model.parameters() if p.requires_grad]
         optimizer = torch.optim.AdamW(trainable, lr=learning_rate)
     else:
