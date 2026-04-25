@@ -260,7 +260,7 @@ except Exception:
 ok = parsed.get("ok") and not parsed.get("errors")
 d = parsed.get("details", {})
 
-print("\n" + "=" * 72)
+print("\\n" + "=" * 72)
 if ok:
     print("  REPAIR OK")
     print(f"    torch       : {d.get('torch_loaded')}  (CUDA {d.get('torch_cuda')})")
