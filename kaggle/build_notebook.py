@@ -465,16 +465,24 @@ KL_BETA          = 0.0
 OUTPUT_DIR       = "/kaggle/working/er_map_grpo_checkpoints"
 PUSH_EVERY_EPS   = 20
 USE_WANDB        = False  # WANDB conflicts with protobuf 7 on Kaggle base image
-NUM_EPISODES     = 200    # hard cap; early-stop usually finishes first
 
-# --- Per-phase reward thresholds (constant for this run) -------------------
-# After every GRPO update we look at the last CONVERGENCE_WINDOW groups; if
-# ALL of them belong to the same current phase AND each has
-# rolling_avg_reward >= PHASE_REWARD_TARGETS[current_phase] AND
-# rolling_win_rate >= PHASE_MIN_WIN_RATE, we either:
-#   - force-promote to the next phase (Phase 1 / Phase 2), OR
-#   - terminate training (Phase 3).
-EARLY_STOP_ENABLED   = True
+# --- Curriculum mode: FIXED-BUDGET (recommended for Kaggle T4) -------------
+# A fixed per-phase episode budget gives you a clean, predictable reward-
+# growth curve and bounds your wall-clock. With GROUP_SIZE=2 below and an
+# observed ~3 min / episode (Groq-dominated), 100 episodes ≈ 5 hours.
+#
+# Set PHASE_EPISODE_BUDGETS to None to fall back to early-stopping mode,
+# which terminates each phase the moment its reward target is hit (faster
+# but less predictable). When PHASE_EPISODE_BUDGETS is set, EARLY_STOP_ENABLED
+# is automatically forced to False inside train() — the reward targets below
+# become observational only (logged on the plots, not used for promotion).
+PHASE_EPISODE_BUDGETS = {1: 20, 2: 30, 3: 50}   # 20 + 30 + 50 = 100 episodes
+NUM_EPISODES          = sum(PHASE_EPISODE_BUDGETS.values())  # = 100
+
+# --- Per-phase reward thresholds (observational under fixed-budget) --------
+# Plotted as horizontal target lines on the reward-growth chart so you can
+# see at a glance whether each phase actually crossed its target.
+EARLY_STOP_ENABLED   = False  # ignored when PHASE_EPISODE_BUDGETS is set
 PHASE_REWARD_TARGETS = {1: 1.2, 2: 1.1, 3: 1.0}
 PHASE_MIN_WIN_RATE   = 0.20
 CONVERGENCE_WINDOW   = 3
@@ -493,13 +501,14 @@ os.environ["ERMAP_EMPATHY_JUDGE_MODEL"]    = "llama-3.3-70b-versatile"
 os.environ["ERMAP_MEDICAL_JUDGE_MODEL"]    = "llama-3.3-70b-versatile"
 
 print("Hyperparameters set:")
-print(f"  NUM_EPISODES         = {NUM_EPISODES}")
-print(f"  GROUP_SIZE           = {GROUP_SIZE}")
-print(f"  PHASE_REWARD_TARGETS = {PHASE_REWARD_TARGETS}")
-print(f"  PHASE_MIN_WIN_RATE   = {PHASE_MIN_WIN_RATE}")
-print(f"  CONVERGENCE_WINDOW   = {CONVERGENCE_WINDOW}")
-print(f"  Nurse / Patient      = llama-3.1-8b-instant (actors, high-volume)")
-print(f"  Empathy / Med Judge  = llama-3.3-70b-versatile (graders, quality)")
+print(f"  NUM_EPISODES          = {NUM_EPISODES}")
+print(f"  GROUP_SIZE            = {GROUP_SIZE}")
+print(f"  PHASE_EPISODE_BUDGETS = {PHASE_EPISODE_BUDGETS}")
+print(f"  PHASE_REWARD_TARGETS  = {PHASE_REWARD_TARGETS}  (observational)")
+print(f"  EARLY_STOP_ENABLED    = {EARLY_STOP_ENABLED}    (forced off under fixed budget)")
+print(f"  KL_BETA               = {KL_BETA}    (0.0 -> skip ref model, T4-safe)")
+print(f"  Nurse / Patient       = llama-3.1-8b-instant (actors, high-volume)")
+print(f"  Empathy / Med Judge   = llama-3.3-70b-versatile (graders, quality)")
 """
 
 CELL_10_PREFLIGHT = """\
@@ -604,29 +613,42 @@ print("Hub-push hook installed.")
 """
 
 CELL_13_TRAIN_MD = """\
-## 13 · Run real training (the 4–6 hour cell)
+## 13 · Run real training (fixed-budget curriculum, ~5 hours)
 
-**Estimated wall-clock on Kaggle T4 ×2:**
+**Mode:** fixed-budget (`PHASE_EPISODE_BUDGETS = {1: 20, 2: 30, 3: 50}` in cell 9).
+The reward thresholds in `PHASE_REWARD_TARGETS` are **observational only** —
+they're plotted as horizontal target lines on the reward curve, but they do
+NOT cause early termination. Each phase runs its full episode budget so the
+final reward-growth chart shows clean, monotone progression.
 
-- ~3–5 min per episode (6–14 env steps × Doctor.generate + 4–8 × Groq calls)
-- ~1–2 min amortized per GRPO update (G=2 trajectories × response-token log-probs)
-- **Per-group ≈ 8–12 min** (2 episodes + 1 update)
+**Estimated wall-clock on Kaggle T4 (×1 active GPU):**
 
-| Phase | Typical episodes to reach target | Wall-clock |
-|---|---|---|
-| 1 (target `+1.2` × 3) | 12 – 24 episodes (6 – 12 groups) | ~1.0 – 2.0 h |
-| 2 (target `+1.1` × 3) | 16 – 32 episodes (8 – 16 groups) | ~1.5 – 2.5 h |
-| 3 (target `+1.0` × 3) | 20 – 50 episodes (10 – 25 groups) | ~2.0 – 4.0 h |
-| **Total** | 50 – 100 episodes | **~4.5 – 8.5 h** |
+- ~2–4 min per episode (Doctor.generate + 4–8 × Groq API calls per turn)
+- ~1–2 min amortized per GRPO update (G=2 trajectories)
+- **Per-group ≈ 5–10 min** (2 episodes + 1 update)
 
-If `NUM_EPISODES=200` is exhausted before Phase 3 converges, training
-stops at the cap and the latest LoRA checkpoint is on HF Hub already
-(we push every 20 episodes), so resume in a fresh session via
+| Phase | Episodes (this run) | GRPO updates | Wall-clock estimate |
+|---|---|---|---|
+| 1 — Tool Mastery        | **20** | 10 | ~50 min – 1.7 h |
+| 2 — Clinical Reasoning  | **30** | 15 | ~1.3 – 2.5 h |
+| 3 — Empathetic Negotiation | **50** | 25 | ~2.0 – 4.0 h |
+| **Total**               | **100** | **50** | **~4.0 – 8.0 h** |
+
+Checkpoints are pushed to HF Hub every `PUSH_EVERY_EPS=20` episodes, so if
+the Kaggle session expires mid-run you can resume in a fresh session via
 `HF_RESUME_REPO` in cell 8.
+
+> **Want even faster?** Drop `PHASE_EPISODE_BUDGETS` to `{1: 10, 2: 15, 3: 25}`
+> in cell 9 (50 episodes total, ~2.0 – 4.0 h). The curve will be choppier but
+> still shows phase transitions cleanly.
+>
+> **Want adaptive (early-stop)?** Set `PHASE_EPISODE_BUDGETS = None` in cell 9
+> and `EARLY_STOP_ENABLED = True`; each phase will end the moment its reward
+> target is sustained for `CONVERGENCE_WINDOW=3` consecutive groups.
 """
 
 CELL_13_TRAIN = """\
-# === CELL 13 — REAL TRAINING (4-6 h cell) ===
+# === CELL 13 — REAL TRAINING (4-6 h cell, fixed-budget curriculum) ===
 metrics = train(
     num_episodes=NUM_EPISODES,
     group_size=GROUP_SIZE,
@@ -642,6 +664,7 @@ metrics = train(
     phase_min_win_rate=PHASE_MIN_WIN_RATE,
     convergence_window=CONVERGENCE_WINDOW,
     early_stop=EARLY_STOP_ENABLED,
+    phase_episode_budgets=PHASE_EPISODE_BUDGETS,  # None -> early-stop mode
 )
 print(f"\\nTraining returned {len(metrics)} metric records.")
 """
