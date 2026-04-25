@@ -172,21 +172,33 @@ get_ipython().system('pip install -q --no-cache-dir --force-reinstall '
                      'torch==2.10.0 torchvision==0.25.0 '
                      '--index-url https://download.pytorch.org/whl/cu128')
 
+# Write a pip constraints file so subsequent installs (bnb, unsloth, trl, etc.)
+# can NEVER pull a different torch from default PyPI. Without this, step 3's
+# `--force-reinstall bitsandbytes` and step 4's `unsloth` upgrade re-resolve
+# torch from PyPI (currently 2.11.0), which breaks the cu128 torchvision pair.
+with open("/tmp/ermap_constraints.txt", "w") as _cf:
+    _cf.write("torch==2.10.0\\ntorchvision==0.25.0\\n")
+
 # 3. Reinstall bitsandbytes against the now-pinned torch.
-print("[3/6] Reinstalling bitsandbytes...")
-get_ipython().system('pip install -q --no-cache-dir --force-reinstall bitsandbytes')
+#    --no-deps because bnb just needs torch at RUNTIME (it dlopens torch's
+#    C++ lib) — its install-time deps don't include torch.
+print("[3/6] Reinstalling bitsandbytes (--no-deps to preserve torch)...")
+get_ipython().system('pip install -q --no-cache-dir --force-reinstall --no-deps bitsandbytes')
 
 # 4. Upgrade unsloth + unsloth_zoo + trl in lockstep. unsloth and
 #    unsloth_zoo are released as a matched pair; if pip pulls a fresh
 #    unsloth_zoo against an old unsloth you get
 #       ImportError: cannot import name 'create_gradient_checkpointing_buffer'
-print("[4/6] Upgrading unsloth + unsloth_zoo + trl...")
+#    The constraint file blocks them from moving torch.
+print("[4/6] Upgrading unsloth + unsloth_zoo + trl (constrained)...")
 get_ipython().system('pip install -q --upgrade --no-cache-dir '
+                     '-c /tmp/ermap_constraints.txt '
                      'unsloth unsloth_zoo "trl>=0.18.2"')
 
 # 5. ER-MAP runtime deps that aren't pre-installed on Kaggle.
-print("[5/6] Installing ER-MAP runtime deps...")
+print("[5/6] Installing ER-MAP runtime deps (constrained)...")
 get_ipython().system('pip install -q --no-cache-dir '
+                     '-c /tmp/ermap_constraints.txt '
                      '"groq>=0.18.0" "huggingface_hub>=0.25.0" '
                      '"gymnasium>=0.29.0" "openenv-core>=0.1.0"')
 
