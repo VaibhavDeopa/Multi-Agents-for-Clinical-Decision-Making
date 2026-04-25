@@ -176,8 +176,19 @@ get_ipython().system('pip install -q --no-cache-dir --force-reinstall '
 # can NEVER pull a different torch from default PyPI. Without this, step 3's
 # `--force-reinstall bitsandbytes` and step 4's `unsloth` upgrade re-resolve
 # torch from PyPI (currently 2.11.0), which breaks the cu128 torchvision pair.
+#
+# Also pin numpy to whatever Kaggle's kernel already has loaded — Kaggle's
+# image puts numpy at /usr/lib/python3/dist-packages while pip writes to
+# /usr/local/lib/python3.12/dist-packages, so any version drift between the
+# two paths trips unsloth_zoo's strict loaded-vs-installed check at import.
+import subprocess as _sp
+_kernel_numpy = _sp.check_output(
+    [sys.executable, "-c", "import numpy; print(numpy.__version__)"],
+    text=True,
+).strip()
+print(f"      detected kernel numpy = {_kernel_numpy} (will pin)")
 with open("/tmp/ermap_constraints.txt", "w") as _cf:
-    _cf.write("torch==2.10.0\\ntorchvision==0.25.0\\n")
+    _cf.write(f"torch==2.10.0\\ntorchvision==0.25.0\\nnumpy=={_kernel_numpy}\\n")
 
 # 3. Reinstall bitsandbytes against the now-pinned torch.
 #    --no-deps because bnb just needs torch at RUNTIME (it dlopens torch's
@@ -201,6 +212,16 @@ get_ipython().system('pip install -q --no-cache-dir '
                      '-c /tmp/ermap_constraints.txt '
                      '"groq>=0.18.0" "huggingface_hub>=0.25.0" '
                      '"gymnasium>=0.29.0" "openenv-core>=0.1.0"')
+
+# 5b. Realign the pip-managed numpy with whatever the Kaggle kernel actually
+#     has loaded. This force-rewrites /usr/local/lib/.../numpy at the exact
+#     version reported by the running interpreter, so importlib.metadata
+#     and `numpy.__version__` agree even if Kaggle ships its base numpy at
+#     a different dist-packages path.
+print(f"[5b/6] Realigning pip-managed numpy to {_kernel_numpy}...")
+get_ipython().system(
+    f'pip install -q --force-reinstall --no-deps "numpy=={_kernel_numpy}"'
+)
 
 # 6. Verify in a SUBPROCESS (so the parent kernel never imports any of these
 #    while pip is mid-flight, which is what causes the
