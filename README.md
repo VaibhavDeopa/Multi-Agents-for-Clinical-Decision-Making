@@ -22,7 +22,7 @@ Built for the [Meta × PyTorch OpenEnv Hackathon — April 2026](https://pytorch
 |  **Live Environment (HF Space)** | [huggingface.co/spaces/Uddiii/Multi-Agentic](https://huggingface.co/spaces/Uddiii/Multi-Agentic) |
 |  **Engineering Deep Dive (Blog)** | [`blog.md`](./blog.md) |
 |  **Demo Video** | [YouTube](https://www.youtube.com/watch?v=hL7n5TU7Bm4) |
-|  **Training Notebook** | [Kaggle / Colab](https://www.kaggle.com/code/aman99123/grpo-rl-trainer) |
+|  **Training Notebook** | [Kaggle](https://www.kaggle.com/code/aman99123/grpo-rl-trainer) |
 | **Baseline Evaluation** | [`baseline_eval/`](./baseline_eval/) |
 
 > **JUDGES: START WITH THE [BLOG](./blog.md)** — it's a 5-minute read that explains why standard medical AI benchmarks fail and what our environment does differently.
