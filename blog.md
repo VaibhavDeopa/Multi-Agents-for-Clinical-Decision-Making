@@ -133,7 +133,7 @@ flowchart TD
     R10 --> SUM
     PEN --> SUM
 
-    SUM --> GRPO[Feeds into GRPO advantage]
+    SUM --> GRPO[Feeds into GRPO advant.age]
 ```
 
 ### Anti-Reward-Hacking Measures (Penalize model for being oversmart)  
