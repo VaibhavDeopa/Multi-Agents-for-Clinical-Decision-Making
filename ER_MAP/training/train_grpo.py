@@ -271,11 +271,15 @@ def load_model_and_tokenizer(
             model,
             r=16,
             lora_alpha=16,
-            lora_dropout=0.05,
-            target_modules=[
-                "q_proj", "k_proj", "v_proj", "o_proj",
-                "gate_proj", "up_proj", "down_proj",
-            ],
+            # lora_dropout MUST be 0 to engage Unsloth's fused LoRA kernels.
+            # Any non-zero dropout disables the fast path and roughly doubles
+            # peak activation VRAM during the GRPO update on T4 (15.6 GB).
+            lora_dropout=0,
+            # Attention-only LoRA (~17 M trainable params). Including MLP
+            # modules pushes the trainable set past 45 M and the AdamW
+            # optimizer state alone past 360 MB — together with checkpointing
+            # buffers this causes recurrent OOMs on Kaggle T4.
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
             bias="none",
             use_gradient_checkpointing="unsloth",
         )
@@ -364,29 +368,54 @@ def generate_doctor_action(
     tokenizer,
     observation: str,
     device: str = "cuda",
-    max_new_tokens: int = 256,
+    max_new_tokens: int = 128,
     temperature: float = 0.7,
 ) -> str:
     """Generate Doctor's JSON action from observation."""
+    # Allow override from env so we can dial generation length without
+    # editing code (used by the Kaggle clean_launch when VRAM is tight).
+    _env_mnt = os.environ.get("ERMAP_DOCTOR_MAX_NEW_TOKENS")
+    if _env_mnt:
+        try:
+            max_new_tokens = max(32, int(_env_mnt))
+        except ValueError:
+            pass
+
     prompt = f"{DOCTOR_SYSTEM_PROMPT}\n\nObservation:\n{observation}\n\nJSON Action:"
 
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1536)
+    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=1024)
     inputs = {k: v.to(device) for k, v in inputs.items()}
 
-    with torch.no_grad():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-            temperature=temperature,
-            do_sample=True,
-            pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
-        )
+    try:
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                do_sample=True,
+                pad_token_id=tokenizer.pad_token_id or tokenizer.eos_token_id,
+                use_cache=True,
+            )
 
-    generated = tokenizer.decode(
-        outputs[0][inputs["input_ids"].shape[1]:],
-        skip_special_tokens=True,
-    )
-    return generated.strip()
+        generated = tokenizer.decode(
+            outputs[0][inputs["input_ids"].shape[1]:],
+            skip_special_tokens=True,
+        )
+        return generated.strip()
+    finally:
+        # Free generation activations + KV cache before the next Doctor turn.
+        # Without this, repeated generate() calls accrete cached blocks that
+        # are reachable but unfreed, eventually OOMing the GRPO update.
+        try:
+            del inputs
+        except Exception:
+            pass
+        try:
+            del outputs  # noqa: F821
+        except Exception:
+            pass
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 # ============================================================================
@@ -850,6 +879,37 @@ def train(
     else:
         logger.info("  Early-stop OFF: will run all configured episodes.")
 
+    # Optional Unsloth fast inference/training mode swappers. When the model
+    # was loaded via Unsloth, switching to inference mode before generation
+    # disables the gradient-checkpointing hooks (which otherwise pin ~7 GB
+    # of activation buffers in VRAM even under torch.no_grad()), and
+    # switching back to training mode re-enables them for the GRPO update.
+    _has_unsloth_swap = False
+    _FastLM = None
+    if not dry_run and model is not None:
+        try:
+            from unsloth import FastLanguageModel as _FastLM  # noqa: F401
+            _has_unsloth_swap = (
+                hasattr(_FastLM, "for_inference") and
+                hasattr(_FastLM, "for_training")
+            )
+        except Exception:
+            _has_unsloth_swap = False
+
+    def _to_inference():
+        if _has_unsloth_swap:
+            try:
+                _FastLM.for_inference(model)
+            except Exception:
+                pass
+
+    def _to_training():
+        if _has_unsloth_swap:
+            try:
+                _FastLM.for_training(model)
+            except Exception:
+                pass
+
     # Outer loop: one iteration = one GRPO update over `group_size` episodes
     while episode_idx < num_episodes:
         env_options = scheduler.get_env_options()
@@ -858,6 +918,10 @@ def train(
         trajectories: List[Dict[str, Any]] = []
         group_outcomes: List[str] = []
         group_rewards: List[float] = []
+
+        # Switch to inference mode so generation doesn't pin gradient
+        # checkpointing buffers (the silent ~7 GB VRAM leak on T4).
+        _to_inference()
 
         # --- Collect G trajectories under same scenario ---
         for g in range(group_size):
@@ -969,6 +1033,19 @@ def train(
 
         # --- GRPO update over the group ---
         if not dry_run and trajectories:
+            # Drop generation activations / KV caches before switching to
+            # training mode and starting the backward pass.
+            if torch.cuda.is_available():
+                gc.collect()
+                torch.cuda.empty_cache()
+                _free, _total = torch.cuda.mem_get_info(0)
+                logger.info(
+                    f"  Pre-update VRAM: {_free/1e9:.2f}/{_total/1e9:.2f} GB free"
+                )
+
+            # Switch the model back to training mode so LoRA grads flow.
+            _to_training()
+
             try:
                 stats = manual_grpo_step(
                     model, ref_model, tokenizer, trajectories,

@@ -74,10 +74,27 @@ assert "scaled.backward()" in _step_src and "n_steps_total" in _step_src, (
     "(graph stays alive in VRAM -> OOM during update). "
     "Pull the latest commit on origin/main."
 )
+
+# Inference/Training mode swap (the silent ~7 GB VRAM leak fix).
+assert "for_inference" in _train_src and "_to_training" in _train_src, (
+    "FAIL: train() missing for_inference/for_training mode swap. "
+    "Pull the latest commit on origin/main."
+)
+
+# LoRA dropout=0 + attention-only modules (Unsloth fast path).
+_loader_src = inspect.getsource(tg.load_model_and_tokenizer)
+assert "lora_dropout=0" in _loader_src, (
+    "FAIL: lora_dropout still > 0 (disables Unsloth fast LoRA kernels)."
+)
+assert '"q_proj", "k_proj", "v_proj", "o_proj"' in _loader_src, (
+    "FAIL: LoRA targets still include MLP modules (too many trainable params for T4)."
+)
 print("  OK — kl_beta gate live")
 print("  OK — phase_episode_budgets supported")
 print("  OK — use_kl branch in loss function")
 print("  OK — per-step backward (memory-bounded GRPO update)")
+print("  OK — for_inference/for_training mode swap (no checkpointing leak)")
+print("  OK — lora_dropout=0, attention-only LoRA (Unsloth fast path)")
 
 # =============================================================================
 # 4. EXPLICIT hyperparameters — does not rely on any previous cell's globals
@@ -110,6 +127,10 @@ os.environ["ERMAP_MEDICAL_JUDGE_MODEL"]    = "llama-3.3-70b-versatile"
 # Episode budget controls (read by triage_env)
 os.environ["ERMAP_MAX_EPISODE_STEPS"]      = "20"
 os.environ["ERMAP_MAX_INTERNAL_EXCHANGES"] = "5"
+
+# Doctor generation length — 128 keeps KV cache + activations small enough
+# for the GRPO update to fit alongside the 8B model on a 15.6 GB T4.
+os.environ["ERMAP_DOCTOR_MAX_NEW_TOKENS"]  = "128"
 
 print(f"  NUM_EPISODES          = {NUM_EPISODES}")
 print(f"  PHASE_EPISODE_BUDGETS = {PHASE_EPISODE_BUDGETS}")
