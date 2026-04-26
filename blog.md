@@ -26,6 +26,39 @@ To make a diagnosis, a doctor doesn't just "guess" through symptoms—they follo
 
 Now lets discuss the playground where our agents play: 
 
+### Agentic Interaction Flow
+
+Here is the full tool-use flow of a single episode. The Doctor picks one JSON tool per turn, the environment routes it to the right actor, and the reward engine scores the result.
+
+```mermaid
+flowchart TD
+    Doctor[Doctor Agent - 8B LoRA] --> read_soap[read_soap - Read patient chart]
+    Doctor --> speak_patient[speak_to patient - Ask symptoms]
+    Doctor --> speak_nurse[speak_to nurse - Request vitals]
+    Doctor --> order_lab[order_lab - Order a test]
+    Doctor --> update_soap[update_soap - Write Assessment or Plan]
+    Doctor --> discharge[terminal_discharge - Final treatment]
+
+    read_soap --> Env[TriageEnv]
+    speak_patient --> Patient[Patient Actor - 8B Groq]
+    speak_nurse --> Nurse[Nurse Actor - 8B Groq]
+    order_lab --> Env
+    update_soap --> Env
+    discharge --> Env
+
+    Patient --> |trust or anxiety status| Env
+    Nurse --> |vitals and observations| Env
+
+    Env --> |per-message| EmpathyJudge[Empathy Judge - 70B]
+    Env --> |terminal only| MedicalJudge[Medical Judge - 70B]
+
+    EmpathyJudge --> |empathy score| Reward[11-Component Reward]
+    MedicalJudge --> |treatment grade| Reward
+    Env --> |process + milestones + labs| Reward
+
+    Reward --> |observation + reward| Doctor
+```
+
 ### Dual-Judge Architecture: The "Anti-Sycophant" Protocol
 **What stops the Doctor from auto-discharging a patient without a diagnosis?** In a standard RL environment, the model might "hack" the reward by being incredibly polite to farm empathy points while ignoring the medical crisis. 
 
@@ -57,58 +90,43 @@ The environment's reward is a composite of **eleven named components**, ensuring
 
 ### Reward Decomposition Flow
 
-This is the path every reward signal takes from a single Doctor action to the trajectory total. The two LLM judges (red) sit on **independent paths** — the Empathy Judge runs every time the Doctor speaks to the patient, the Medical Judge runs only at the terminal step. Because they're both 70B Llama-3.3 with non-overlapping rubrics, the Doctor cannot maximize total reward by hacking just one of them. The seven rule-based components on the left act as a deterministic floor that prevents the model from skipping straight to discharge.
+The two LLM judges sit on **independent paths** — the Empathy Judge runs every time the Doctor speaks to the patient, the Medical Judge runs only at the terminal step. The seven rule-based components act as a deterministic floor.
 
 ```mermaid
 flowchart TD
-    DOC["Doctor JSON Action<br/>(every step, max 128 tokens)"]
-    DOC --> SCHEMA{"JSON + tool<br/>grammar valid?"}
-    SCHEMA -->|no| MALF["Malformed → Process penalty: −0.10"]
-    SCHEMA -->|yes| EXEC["TriageEnv.step()"]
+    DOC[Doctor Action] --> VALID{Valid JSON?}
+    VALID -->|no| PEN[Penalty -0.10]
+    VALID -->|yes| ENV[TriageEnv processes action]
 
-    EXEC --> RB
-    subgraph RB["Per-step rule-based engine — deterministic, no LLM"]
-      direction TB
-      C_PROC["Process<br/>+0.05 valid step"]
-      C_MILES["Milestones<br/>+0.10 chart → labs → SOAP order"]
-      C_LABS["Labs<br/>+0.20 relevant / −0.05 distractor"]
-      C_DOCU["Documentation<br/>+0.20 SOAP filled / −0.30 missing"]
-      C_DIAG["Diagnosis (intermediate)<br/>+0.15 SOAP Assessment matches GT"]
-      C_PLAN["Plan (intermediate)<br/>+0.10 plausible plan"]
-      C_PEN["Penalties<br/>−0.05 redundancy<br/>−0.10 timeout<br/>−0.20 dismissive discharge"]
-    end
+    ENV --> RULES[Rule-Based Rewards]
+    ENV --> EJ[Empathy Judge 70B - per message]
+    ENV --> MJ[Medical Judge 70B - terminal only]
 
-    EXEC -->|speak_to_patient| EJ["Empathy Judge · 70B<br/>llama-3.3-70b-versatile<br/>scores every Doctor message"]
-    EJ --> C_EMP["Empathy<br/>+0.05 explained · +0.03 acknowledged<br/>−0.08 dismissive"]
+    RULES --> R1[Process +0.05]
+    RULES --> R2[Milestones +0.10]
+    RULES --> R3[Labs +0.20 or -0.05]
+    RULES --> R4[Documentation +0.20]
+    RULES --> R5[Diagnosis +0.15]
+    RULES --> R6[Penalties -0.05 to -0.20]
 
-    EXEC -->|treat / discharge| MJ["Medical Judge · 70B<br/>llama-3.3-70b-versatile<br/>terminal grade only"]
-    MJ --> TM
-    subgraph TM["Terminal components — all from Medical Judge"]
-      direction TB
-      C_TREAT["Treatment<br/>+1.00 correct / −1.00 lethal"]
-      C_EMER["Emergency ID<br/>+0.30 in-time / −0.30 missed"]
-      C_CONS["Consent<br/>+0.15 informed / −0.40 forced"]
-    end
+    EJ --> R7[Empathy +0.05 or -0.08]
+    MJ --> R8[Treatment +1.0 or -1.0]
+    MJ --> R9[Emergency ID +0.30 or -0.30]
+    MJ --> R10[Consent +0.15 or -0.40]
 
-    MALF --> AGG
-    RB --> AGG
-    C_EMP --> AGG
-    TM --> AGG
+    R1 --> SUM[Sum of 11 components = Trajectory Reward]
+    R2 --> SUM
+    R3 --> SUM
+    R4 --> SUM
+    R5 --> SUM
+    R6 --> SUM
+    R7 --> SUM
+    R8 --> SUM
+    R9 --> SUM
+    R10 --> SUM
+    PEN --> SUM
 
-    AGG["Σ 11 components → R_trajectory"] --> CLIP["clip into [−5, +5]"]
-    CLIP --> OUT["Trajectory reward<br/>(feeds GRPO advantage)"]
-
-    classDef judge fill:#fde2e4,stroke:#c1121f,color:#000
-    classDef bonus fill:#d4edda,stroke:#155724,color:#000
-    classDef penalty fill:#f8d7da,stroke:#842029,color:#000
-    classDef gate fill:#fff3b0,stroke:#996600,color:#000
-    classDef agg fill:#ffe066,stroke:#664d00,color:#000
-
-    class EJ,MJ judge
-    class C_PROC,C_MILES,C_LABS,C_DOCU,C_DIAG,C_PLAN,C_EMP,C_TREAT,C_EMER,C_CONS bonus
-    class MALF,C_PEN penalty
-    class SCHEMA gate
-    class AGG,CLIP,OUT agg
+    SUM --> GRPO[Feeds into GRPO advantage]
 ```
 
 ### Anti-Reward-Hacking Measures (Penalize model for being oversmart)  
@@ -161,57 +179,27 @@ The pipeline below shows every stage from "scheduler picks a phase" to "AdamW up
 
 ```mermaid
 flowchart TD
-    subgraph SCHED["Curriculum Scheduler — fixed-budget, 75 episodes"]
-      direction LR
-      P1["Phase 1: Tool Mastery<br/>20 episodes · compliant patients"]
-      P2["Phase 2: Clinical Reasoning<br/>25 episodes · noisy SOAP"]
-      P3["Phase 3: Empathetic Negotiation<br/>30 episodes · hostile · cost-sensitive"]
-      P1 -->|budget hit| P2 -->|budget hit| P3
-    end
+    SCHED[Curriculum Scheduler - 75 episodes] --> P1[Phase 1 - Tool Mastery - 20 ep]
+    P1 --> P2[Phase 2 - Clinical Reasoning - 25 ep]
+    P2 --> P3[Phase 3 - Empathetic Negotiation - 30 ep]
 
-    SCHED --> SEED["Sample shared seed<br/>+ env_options<br/>(disease, persona, difficulty)"]
+    P1 --> SEED[Sample shared seed + disease + persona]
+    P2 --> SEED
+    P3 --> SEED
 
-    SEED --> INF["FastLM.for_inference(model)<br/>drop grad-ckpt buffers — T4 OOM fix"]
+    SEED --> INF[Switch to inference mode - saves VRAM]
+    INF --> EPA[Episode A - up to 20 steps]
+    INF --> EPB[Episode B - same seed different actions]
 
-    INF --> ROLL
-    subgraph ROLL["Group Rollout · G = 2 trajectories · same seed"]
-      direction LR
-      EPA["Episode A (≤ 20 steps)<br/>Doctor ↔ Nurse / Patient<br/>Empathy Judge per message<br/>Medical Judge at terminal"]
-      EPB["Episode B (≤ 20 steps)<br/>same seed · different sample<br/>(temperature 0.7)"]
-    end
+    EPA --> REWARDS[Compute trajectory rewards R_A and R_B]
+    EPB --> REWARDS
 
-    ROLL --> RAGG["Per-trajectory reward aggregation<br/>11 components → R_A, R_B<br/>(see reward diagram above)"]
-
-    RAGG --> ADV["Group-Relative Advantage<br/>Aᵢ = (Rᵢ − μ_R) / (σ_R + ε)<br/>no value model — group is the baseline"]
-
-    ADV --> TRN["FastLM.for_training(model)<br/>re-enable gradient checkpointing"]
-
-    TRN --> GRPO
-    subgraph GRPO["GRPO Update — per-step backward (T4-safe)"]
-      direction TB
-      STEP["For each (prompt, response) pair<br/>across both trajectories — ≈ 40 pairs"]
-      STEP --> LOSS["L_step = −Aᵢ · meanₜ log π_θ(aₜ|sₜ)<br/>KL term off (β = 0)"]
-      LOSS --> SCALE["scale by 1 / n_steps_total<br/>loss.backward() per step<br/>release graph, accumulate grad"]
-      SCALE --> MORE{more pairs?}
-      MORE -->|yes| STEP
-      MORE -->|no| OPT["clip_grad_norm = 1.0<br/>AdamW step (lr = 5e-6)<br/>updates LoRA only<br/>q/k/v/o_proj · ~17M params"]
-    end
-
-    GRPO --> CKPT["Periodic LoRA checkpoint<br/>every 10 episodes<br/>checkpoint_epN_phaseM/"]
-    GRPO --> METRICS["Append to training_metrics.json<br/>(per-episode log)"]
-    GRPO -->|loop until 75 episodes| SCHED
-
-    SCHED -.budget exhausted.-> FIN["Final save<br/>final_lora/ · final_merged_fp16/<br/>+ post-training inference smoke test"]
-
-    classDef phase fill:#cce5ff,stroke:#004085,color:#000
-    classDef mem fill:#fff3b0,stroke:#996600,color:#000
-    classDef rl fill:#d3f9d8,stroke:#2b8a3e,color:#000
-    classDef save fill:#f8d7da,stroke:#842029,color:#000
-
-    class P1,P2,P3 phase
-    class INF,TRN mem
-    class ADV,GRPO rl
-    class FIN,CKPT save
+    REWARDS --> ADV[Group-Relative Advantage - no critic needed]
+    ADV --> TRAIN[Switch to training mode]
+    TRAIN --> GRPO[GRPO Update - per-step backward]
+    GRPO --> LORA[AdamW updates LoRA weights - 17M params]
+    LORA --> SAVE[Checkpoint every 10 episodes]
+    LORA -->|next episode| SCHED
 ```
 
 ### Why Manual GRPO, Not TRL?

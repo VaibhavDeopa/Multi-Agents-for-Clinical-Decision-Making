@@ -48,16 +48,16 @@ A multi-agent simulation implemented via Gymnasium and served via a FastAPI HTTP
 
 ```mermaid
 flowchart TD
-    Doctor["Doctor Agent\n8B Llama LoRA"] -->|"JSON action"| Env["TriageEnv\nGymnasium + FastAPI\n50-disease DB · 17K+ persona combos"]
-    Env -->|"speak_to"| Nurse["Nurse Actor\n8B-Instant Groq"]
-    Env -->|"speak_to"| Patient["Patient Actor\n8B-Instant Groq\ntrust / anxiety state"]
-    Env -->|"per-message"| EJ["Empathy Judge\n70B-Versatile Groq"]
-    Env -->|"terminal treatment"| MJ["Medical Judge\n70B-Versatile Groq"]
-    Nurse -->|"response"| Env
-    Patient -->|"response + status"| Env
-    EJ -->|"empathy score"| Env
-    MJ -->|"treatment grade"| Env
-    Env -->|"observation + reward"| Doctor
+    Doctor[Doctor Agent - 8B LoRA] --> Env[TriageEnv - Gymnasium + FastAPI]
+    Env --> Nurse[Nurse Actor - 8B Groq]
+    Env --> Patient[Patient Actor - 8B Groq]
+    Env --> EJ[Empathy Judge - 70B Groq]
+    Env --> MJ[Medical Judge - 70B Groq]
+    Nurse --> Env
+    Patient --> Env
+    EJ --> |empathy score| Env
+    MJ --> |treatment grade| Env
+    Env --> |observation + reward| Doctor
 ```
 
 ### The Actors
