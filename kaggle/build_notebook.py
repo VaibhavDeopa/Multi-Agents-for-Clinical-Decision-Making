@@ -476,8 +476,8 @@ USE_WANDB        = False  # WANDB conflicts with protobuf 7 on Kaggle base image
 # but less predictable). When PHASE_EPISODE_BUDGETS is set, EARLY_STOP_ENABLED
 # is automatically forced to False inside train() — the reward targets below
 # become observational only (logged on the plots, not used for promotion).
-PHASE_EPISODE_BUDGETS = {1: 20, 2: 30, 3: 50}   # 20 + 30 + 50 = 100 episodes
-NUM_EPISODES          = sum(PHASE_EPISODE_BUDGETS.values())  # = 100
+PHASE_EPISODE_BUDGETS = {1: 20, 2: 25, 3: 30}   # 20 + 25 + 30 = 75 episodes
+NUM_EPISODES          = sum(PHASE_EPISODE_BUDGETS.values())  # = 75
 
 # --- Per-phase reward thresholds (observational under fixed-budget) --------
 # Plotted as horizontal target lines on the reward-growth chart so you can
