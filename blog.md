@@ -8,7 +8,7 @@ We aren't just introducing agentic reinforcement learning for medical data. We a
 
 Big talks, right? Let's go to the demo video!
 
-[![Watch the Demo Video](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+[![Watch the Demo Video](https://img.youtube.com/vi/hL7n5TU7Bm4/maxresdefault.jpg)](https://www.youtube.com/watch?v=hL7n5TU7Bm4)
 
 *(Yes, the video was a bit long , but it would have definitely helped you grasp the technical depth and chaos of the simulation in action.)*
 

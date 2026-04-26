@@ -24,7 +24,7 @@ Built for the [Meta × PyTorch OpenEnv Hackathon — April 2026](https://pytorch
 |:---|:---|
 | 🌐 **Live Environment (HF Space)** | [huggingface.co/spaces/YOUR_USERNAME/er-map-triage](https://huggingface.co/spaces/YOUR_USERNAME/er-map-triage) |
 | 📝 **Engineering Deep Dive (Blog)** | [`blog.md`](./blog.md) |
-| 🎬 **Demo Video** | [YouTube](https://www.youtube.com/watch?v=YOUR_VIDEO_ID) |
+| 🎬 **Demo Video** | [YouTube](https://www.youtube.com/watch?v=hL7n5TU7Bm4) |
 | 📓 **Training Notebook** | [Kaggle / Colab](YOUR_NOTEBOOK_LINK) |
 | 📊 **Baseline Evaluation** | [`baseline_eval/`](./baseline_eval/) |
 
