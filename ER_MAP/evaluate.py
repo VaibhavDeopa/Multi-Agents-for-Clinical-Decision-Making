@@ -434,9 +434,9 @@ def main():
 
     from ER_MAP.envs.triage_env import TriageEnv
 
-    nurse_key = os.environ.get("GROQ_NURSE_API_KEY", "")
-    patient_key = os.environ.get("GROQ_PATIENT_API_KEY", "")
-    doctor_key = os.environ.get("GROQ_DOCTOR_API_KEY", "") or patient_key
+    nurse_key = ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", ""))
+    patient_key = ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", ""))
+    doctor_key = ((os.environ.get("GROQ_DOCTOR_API_KEY") or os.environ.get("doctor")) or os.environ.get("doctor", "")) or patient_key
 
     if not nurse_key or not patient_key:
         print("ERROR: Set GROQ_NURSE_API_KEY and GROQ_PATIENT_API_KEY", flush=True)

@@ -217,8 +217,8 @@ metrics = tg.train(
     num_episodes=NUM_EPISODES,
     group_size=GROUP_SIZE,
     model_name=MODEL_NAME,
-    groq_api_key=os.environ.get("GROQ_NURSE_API_KEY", "")
-                 or os.environ.get("GROQ_API_KEY", ""),
+    groq_api_key=((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", ""))
+                 or ((os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or os.environ.get("groq", "")),
     learning_rate=LEARNING_RATE,
     kl_beta=KL_BETA,
     use_wandb=False,

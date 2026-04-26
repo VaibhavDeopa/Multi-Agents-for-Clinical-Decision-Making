@@ -791,7 +791,7 @@ def train(
         f"kl_beta={kl_beta}"
     )
 
-    groq_key = groq_api_key or os.environ.get("GROQ_API_KEY", "")
+    groq_key = groq_api_key or ((os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or os.environ.get("groq", ""))
 
     scheduler = CurriculumScheduler()
     logger.info(f"Starting Phase: {scheduler.current_phase.name}")

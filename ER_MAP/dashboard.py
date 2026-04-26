@@ -259,10 +259,10 @@ def get_env():
         from ER_MAP.envs.triage_env import TriageEnv
         # Per-role keys (4 distinct Groq accounts in the demo config:
         # Nurse / Patient / Empathy Judge / Medical Judge).
-        nurse_key   = os.environ.get("GROQ_NURSE_API_KEY", "")
-        patient_key = os.environ.get("GROQ_PATIENT_API_KEY", "")
-        empathy_key = os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", "")
-        medical_key = os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", "")
+        nurse_key   = ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", ""))
+        patient_key = ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", ""))
+        empathy_key = ((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", ""))
+        medical_key = ((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", ""))
 
         # Default / fallback model — used by any role that doesn't
         # specify its own model.
@@ -292,14 +292,14 @@ def get_doctor():
     global DOCTOR
     if DOCTOR is None:
         # Doctor's primary key = its own dedicated Groq account.
-        primary_key = os.environ.get("GROQ_DOCTOR_API_KEY", "") or os.environ.get("GROQ_PATIENT_API_KEY", "")
+        primary_key = ((os.environ.get("GROQ_DOCTOR_API_KEY") or os.environ.get("doctor")) or os.environ.get("doctor", "")) or ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", ""))
         # Full fallback chain: nurse → patient → empathy_judge → medical_judge.
         # Lets the demo survive 4-of-5 dead keys.
         fallback_keys = [
-            os.environ.get("GROQ_NURSE_API_KEY", ""),
-            os.environ.get("GROQ_PATIENT_API_KEY", ""),
-            os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", ""),
-            os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", ""),
+            ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", "")),
+            ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", "")),
+            ((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", "")),
+            ((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", "")),
         ]
         # Doctor model defaults to 8B (small/fast tier). Override with
         # ERMAP_DOCTOR_MODEL or legacy ERMAP_MODEL.
@@ -1474,11 +1474,11 @@ def _print_role_config_banner() -> None:
         return k[:8] + "..." + k[-4:]
 
     rows = [
-        ("Doctor",        os.environ.get("GROQ_DOCTOR_API_KEY", ""),         os.environ.get("ERMAP_DOCTOR_MODEL", "llama-3.1-8b-instant")),
-        ("Nurse",         os.environ.get("GROQ_NURSE_API_KEY", ""),          os.environ.get("ERMAP_NURSE_MODEL", "llama-3.3-70b-versatile")),
-        ("Patient",       os.environ.get("GROQ_PATIENT_API_KEY", ""),        os.environ.get("ERMAP_PATIENT_MODEL", "llama-3.3-70b-versatile")),
-        ("Empathy Judge", os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", ""),  os.environ.get("ERMAP_EMPATHY_JUDGE_MODEL", "llama-3.3-70b-versatile")),
-        ("Medical Judge", os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", ""),  os.environ.get("ERMAP_MEDICAL_JUDGE_MODEL", "llama-3.3-70b-versatile")),
+        ("Doctor",        ((os.environ.get("GROQ_DOCTOR_API_KEY") or os.environ.get("doctor")) or os.environ.get("doctor", "")),         os.environ.get("ERMAP_DOCTOR_MODEL", "llama-3.1-8b-instant")),
+        ("Nurse",         ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", "")),          os.environ.get("ERMAP_NURSE_MODEL", "llama-3.3-70b-versatile")),
+        ("Patient",       ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", "")),        os.environ.get("ERMAP_PATIENT_MODEL", "llama-3.3-70b-versatile")),
+        ("Empathy Judge", ((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", "")),  os.environ.get("ERMAP_EMPATHY_JUDGE_MODEL", "llama-3.3-70b-versatile")),
+        ("Medical Judge", ((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", "")),  os.environ.get("ERMAP_MEDICAL_JUDGE_MODEL", "llama-3.3-70b-versatile")),
     ]
 
     print("", flush=True)

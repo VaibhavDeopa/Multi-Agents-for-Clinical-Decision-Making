@@ -206,9 +206,9 @@ def main():
         except Exception as e:
             print(f"  [TTS init failed: {e}] Running without voice.")
 
-    nurse_key = os.environ.get("GROQ_NURSE_API_KEY", "")
-    patient_key = os.environ.get("GROQ_PATIENT_API_KEY", "")
-    shared_key = os.environ.get("GROQ_API_KEY", "")
+    nurse_key = ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", ""))
+    patient_key = ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", ""))
+    shared_key = ((os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or os.environ.get("groq", ""))
 
     has_any_key = nurse_key or patient_key or shared_key
 

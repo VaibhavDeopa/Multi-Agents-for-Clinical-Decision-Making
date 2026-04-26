@@ -461,7 +461,7 @@ class TTSEngine:
     """
 
     def __init__(self, elevenlabs_api_key: Optional[str] = None, groq_api_key: Optional[str] = None):
-        self.api_key = elevenlabs_api_key or os.environ.get("ELEVENLABS_API_KEY", "")
+        self.api_key = elevenlabs_api_key or ((os.environ.get("ELEVENLABS_API_KEY") or os.environ.get("elevenlabs")) or os.environ.get("elevenlabs", ""))
         self.use_elevenlabs = False
         self._eleven_client = None
         self._pygame = None
@@ -493,12 +493,12 @@ class TTSEngine:
         # if one of the other Groq accounts is alive.
         candidate_keys = [
             groq_api_key,
-            os.environ.get("GROQ_NURSE_API_KEY"),
-            os.environ.get("GROQ_PATIENT_API_KEY"),
-            os.environ.get("GROQ_DOCTOR_API_KEY"),
-            os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY"),
-            os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY"),
-            os.environ.get("GROQ_API_KEY"),
+            (os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")),
+            (os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")),
+            (os.environ.get("GROQ_DOCTOR_API_KEY") or os.environ.get("doctor")),
+            (os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")),
+            (os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")),
+            (os.environ.get("GROQ_API_KEY") or os.environ.get("groq")),
         ]
         _groq_key = next((k for k in candidate_keys if k), "")
         if _groq_key:

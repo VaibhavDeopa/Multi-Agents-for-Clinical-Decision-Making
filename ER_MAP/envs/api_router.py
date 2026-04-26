@@ -140,11 +140,11 @@ class AgentRouter:
         }
 
         # Resolve per-role API keys (explicit > role-specific env > shared)
-        shared_key      = api_key or os.environ.get("GROQ_API_KEY", "")
-        nurse_key       = nurse_api_key         or os.environ.get("GROQ_NURSE_API_KEY", "")          or shared_key
-        patient_key     = patient_api_key       or os.environ.get("GROQ_PATIENT_API_KEY", "")        or shared_key
-        empathy_key     = empathy_judge_api_key or os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", "")  or ""
-        medical_key     = medical_judge_api_key or os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", "")  or ""
+        shared_key      = api_key or ((os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or os.environ.get("groq", ""))
+        nurse_key       = nurse_api_key         or ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", ""))          or shared_key
+        patient_key     = patient_api_key       or ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", ""))        or shared_key
+        empathy_key     = empathy_judge_api_key or ((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", ""))  or ""
+        medical_key     = medical_judge_api_key or ((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", ""))  or ""
 
         # Create per-role Groq clients (4 logical roles).
         # If a judge has no dedicated key, its client is left None and the

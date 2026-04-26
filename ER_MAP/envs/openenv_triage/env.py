@@ -72,11 +72,11 @@ def _stub_env_kwargs() -> Dict[str, Any]:
     empty keys is sufficient. The stub mode is documented in the README.
     """
     return {
-        "groq_api_key": os.environ.get("GROQ_API_KEY", "") or None,
-        "nurse_api_key": os.environ.get("GROQ_NURSE_API_KEY", "") or None,
-        "patient_api_key": os.environ.get("GROQ_PATIENT_API_KEY", "") or None,
-        "empathy_judge_api_key": os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", "") or None,
-        "medical_judge_api_key": os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", "") or None,
+        "groq_api_key": ((os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or os.environ.get("groq", "")) or None,
+        "nurse_api_key": ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", "")) or None,
+        "patient_api_key": ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", "")) or None,
+        "empathy_judge_api_key": ((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", "")) or None,
+        "medical_judge_api_key": ((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", "")) or None,
         "model": os.environ.get("ERMAP_MODEL", "llama-3.3-70b-versatile"),
     }
 

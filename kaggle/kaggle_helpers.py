@@ -278,7 +278,7 @@ def kaggle_env_summary() -> None:
     except Exception:
         gpu, vram = "(torch import failed)", "—"
 
-    has_groq = bool(os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("GROQ_API_KEY"))
+    has_groq = bool((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or (os.environ.get("GROQ_API_KEY") or os.environ.get("groq")))
     has_hf = bool(os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN"))
     has_wandb = bool(os.environ.get("WANDB_API_KEY"))
 

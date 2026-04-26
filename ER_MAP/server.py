@@ -97,11 +97,11 @@ def _get_env() -> TriageEnv:
     global _ENV
     if _ENV is None:
         _ENV = TriageEnv(
-            groq_api_key=os.environ.get("GROQ_API_KEY", ""),
-            nurse_api_key=os.environ.get("GROQ_NURSE_API_KEY", ""),
-            patient_api_key=os.environ.get("GROQ_PATIENT_API_KEY", ""),
-            empathy_judge_api_key=os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", ""),
-            medical_judge_api_key=os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", ""),
+            groq_api_key=((os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or os.environ.get("groq", "")),
+            nurse_api_key=((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", "")),
+            patient_api_key=((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", "")),
+            empathy_judge_api_key=((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", "")),
+            medical_judge_api_key=((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", "")),
             model=os.environ.get("ERMAP_MODEL", "llama-3.3-70b-versatile"),
             nurse_model=os.environ.get("ERMAP_NURSE_MODEL"),
             patient_model=os.environ.get("ERMAP_PATIENT_MODEL"),

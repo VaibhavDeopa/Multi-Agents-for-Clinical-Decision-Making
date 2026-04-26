@@ -23,7 +23,7 @@ def print_header(title):
     print(f"{Fore.CYAN}{Style.BRIGHT}{'='*60}")
 
 def run_automated_cli(phase: int):
-    groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("GROQ_PATIENT_API_KEY")
+    groq_key = (os.environ.get("GROQ_API_KEY") or os.environ.get("groq")) or (os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or (os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient"))
     if not groq_key or not GROQ_AVAILABLE:
         print(f"{Fore.RED}ERROR: GROQ_API_KEY environment variable required and 'groq' package must be installed.")
         return

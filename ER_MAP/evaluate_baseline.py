@@ -273,11 +273,11 @@ def main() -> int:
                              "(human-readable terminal). Set 0 for fast.")
     args = parser.parse_args()
 
-    nurse_key   = os.environ.get("GROQ_NURSE_API_KEY", "")
-    patient_key = os.environ.get("GROQ_PATIENT_API_KEY", "")
-    doctor_key  = os.environ.get("GROQ_DOCTOR_API_KEY", "") or patient_key
-    empathy_key = os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", "") or nurse_key
-    medical_key = os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", "") or nurse_key
+    nurse_key   = ((os.environ.get("GROQ_NURSE_API_KEY") or os.environ.get("nurse")) or os.environ.get("nurse", ""))
+    patient_key = ((os.environ.get("GROQ_PATIENT_API_KEY") or os.environ.get("patient")) or os.environ.get("patient", ""))
+    doctor_key  = ((os.environ.get("GROQ_DOCTOR_API_KEY") or os.environ.get("doctor")) or os.environ.get("doctor", "")) or patient_key
+    empathy_key = ((os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY") or os.environ.get("empathy")) or os.environ.get("empathy", "")) or nurse_key
+    medical_key = ((os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY") or os.environ.get("medical")) or os.environ.get("medical", "")) or nurse_key
 
     if not nurse_key or not patient_key:
         print("ERROR: Set GROQ_NURSE_API_KEY and GROQ_PATIENT_API_KEY (and "
