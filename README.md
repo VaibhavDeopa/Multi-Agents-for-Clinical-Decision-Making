@@ -1,14 +1,11 @@
 ---
 title: Multi-Agents for Clinical Decision Making
-emoji: 🏥
-colorFrom: red
-colorTo: blue
 sdk: docker
 pinned: false
 license: mit
 ---
 
-# 🏥 Multi-Agents for Clinical Decision Making
+#  Multi-Agents for Clinical Decision Making
 
 > **What happens when you drop an 8B LLM into a chaotic Emergency Room, surround it with simulated patients and nurses, and force it to learn medicine through trial by fire?**
 
@@ -18,15 +15,15 @@ Built for the [Meta × PyTorch OpenEnv Hackathon — April 2026](https://pytorch
 
 ---
 
-## 📌 Quick Links
+##  Quick Links
 
 | Resource | Link |
 |:---|:---|
-| 🌐 **Live Environment (HF Space)** | [huggingface.co/spaces/Uddiii/Multi-Agentic](https://huggingface.co/spaces/Uddiii/Multi-Agentic) |
-| 📝 **Engineering Deep Dive (Blog)** | [`blog.md`](./blog.md) |
-| 🎬 **Demo Video** | [YouTube](https://www.youtube.com/watch?v=hL7n5TU7Bm4) |
-| 📓 **Training Notebook** | [Kaggle / Colab](https://www.kaggle.com/code/aman99123/grpo-rl-trainer) |
-| 📊 **Baseline Evaluation** | [`baseline_eval/`](./baseline_eval/) |
+|  **Live Environment (HF Space)** | [huggingface.co/spaces/Uddiii/Multi-Agentic](https://huggingface.co/spaces/Uddiii/Multi-Agentic) |
+|  **Engineering Deep Dive (Blog)** | [`blog.md`](./blog.md) |
+|  **Demo Video** | [YouTube](https://www.youtube.com/watch?v=hL7n5TU7Bm4) |
+|  **Training Notebook** | [Kaggle / Colab](https://www.kaggle.com/code/aman99123/grpo-rl-trainer) |
+| **Baseline Evaluation** | [`baseline_eval/`](./baseline_eval/) |
 
 > **JUDGES: START WITH THE [BLOG](./blog.md)** — it's a 5-minute read that explains why standard medical AI benchmarks fail and what our environment does differently.
 
@@ -201,7 +198,7 @@ python -m ER_MAP.dashboard
 
 ---
 
-## 📁 Repository Structure
+##  Repository Structure
 
 ```
 ├── README.md                 # This file
