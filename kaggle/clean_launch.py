@@ -23,6 +23,12 @@ That one line is all you paste. Press play. Walk away for ~4 hours.
 
 import os, sys, gc, subprocess, importlib  # noqa: E401
 
+# Set the CUDA allocator config FIRST, before anything imports torch.
+# This must precede the very first `import torch` in the kernel — otherwise
+# the allocator is already initialized and the env var has no effect.
+os.environ.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 # =============================================================================
 # 1. Force repo to latest commit on origin/main
 # =============================================================================
@@ -59,9 +65,19 @@ assert "phase_episode_budgets" in _train_src, (
 assert "use_kl" in tg.manual_grpo_step.__code__.co_varnames, (
     "FAIL: manual_grpo_step missing 'use_kl' branch."
 )
+
+# Per-step backward (T4 OOM fix): the loss must be scaled and backward()-ed
+# inside the trajectory loop, NOT accumulated into one big graph.
+_step_src = inspect.getsource(tg.manual_grpo_step)
+assert "scaled.backward()" in _step_src and "n_steps_total" in _step_src, (
+    "FAIL: manual_grpo_step still accumulates loss across all steps "
+    "(graph stays alive in VRAM -> OOM during update). "
+    "Pull the latest commit on origin/main."
+)
 print("  OK — kl_beta gate live")
 print("  OK — phase_episode_budgets supported")
 print("  OK — use_kl branch in loss function")
+print("  OK — per-step backward (memory-bounded GRPO update)")
 
 # =============================================================================
 # 4. EXPLICIT hyperparameters — does not rely on any previous cell's globals
@@ -80,8 +96,10 @@ CONVERGENCE_WINDOW    = 3
 EARLY_STOP_ENABLED    = False  # forced off by train() under fixed-budget anyway
 OUTPUT_DIR            = "/kaggle/working/er_map_grpo_checkpoints"
 
-# Anti-fragmentation for the GRPO backward pass on T4
+# Anti-fragmentation for the GRPO backward pass on T4 (re-asserted; the real
+# set must happen at the top of this script, before the first torch import).
 os.environ["PYTORCH_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 # Groq traffic shaping — 8B for actors, 70B for judges
 os.environ["ERMAP_NURSE_MODEL"]            = "llama-3.1-8b-instant"

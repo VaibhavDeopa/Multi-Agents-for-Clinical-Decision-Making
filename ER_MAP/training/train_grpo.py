@@ -41,6 +41,7 @@ Usage (local dry-run, no GPU):
 """
 
 import os
+import gc
 import json
 import math
 import random
@@ -556,11 +557,20 @@ def manual_grpo_step(
 
     advantages = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
 
-    total_loss = torch.zeros((), device=device)
+    use_kl = (ref_model is not None) and (beta > 0.0)
+
+    # Per-step backward (memory-bounded for T4): accumulating loss across all
+    # (prompt, response) pairs and backward()-ing once at the end keeps every
+    # forward-pass activation graph alive in VRAM, which OOMs on T4 once we
+    # cross ~30 steps. Instead, scale each step's loss by 1/n_steps_total
+    # and backward() it immediately — gradients accumulate correctly in .grad
+    # and each forward's graph is released before the next forward begins.
+    n_steps_total = max(1, sum(len(t.get("prompts", [])) for t in trajectories))
+
+    optimizer.zero_grad()
+    total_loss_value = 0.0
     total_kl = 0.0
     n_steps = 0
-
-    use_kl = (ref_model is not None) and (beta > 0.0)
 
     for traj_idx, traj in enumerate(trajectories):
         adv = advantages[traj_idx]
@@ -588,24 +598,29 @@ def manual_grpo_step(
             else:
                 step_loss = policy_term
 
-            total_loss = total_loss + step_loss
+            # Scale and immediately backward to free this step's activations.
+            scaled = step_loss / n_steps_total
+            scaled.backward()
+
+            total_loss_value += float(step_loss.detach().item())
             n_steps += 1
 
+            # Free intermediate tensors before the next forward.
+            del logp_pi, logp_pi_norm, policy_term, step_loss, scaled
+
     if n_steps == 0:
+        optimizer.zero_grad()
         return {"loss": 0.0, "kl": 0.0, "n_steps": 0}
 
-    total_loss = total_loss / n_steps
-
-    optimizer.zero_grad()
-    total_loss.backward()
     torch.nn.utils.clip_grad_norm_(
         [p for p in model.parameters() if p.requires_grad],
         max_norm=1.0,
     )
     optimizer.step()
+    optimizer.zero_grad(set_to_none=True)
 
     return {
-        "loss": float(total_loss.item()),
+        "loss": total_loss_value / n_steps,
         "kl": total_kl / n_steps,
         "n_steps": n_steps,
         "advantages_mean": float(advantages.mean().item()),
@@ -994,6 +1009,19 @@ def train(
                     })
             except Exception as e:
                 logger.error(f"  GRPO update failed: {e}")
+                # Best-effort recovery: drop graphs/cache so the next group
+                # starts from a clean VRAM baseline instead of cascading OOM.
+                if torch.cuda.is_available():
+                    optimizer.zero_grad(set_to_none=True)
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+
+        # --- Free generation activations / KV cache before the next group ---
+        del trajectories
+        if torch.cuda.is_available():
+            gc.collect()
+            torch.cuda.empty_cache()
 
         # --- Periodic checkpoint (LoRA adapters) ---
         if episode_idx % (group_size * 5) == 0 and not dry_run:
