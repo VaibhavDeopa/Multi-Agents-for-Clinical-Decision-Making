@@ -1,4 +1,4 @@
-# Badi Baatcheet (Multi-Agentic Interactions)
+# Badi Baatcheet (Multi-Agentic Interactions) : Blog
 
 > **Have you ever visited a real hospital?** Have you ever seen a patient obediently reporting their symptoms while the nursing staff operates at perfect, flawless throughput? Of course not. Yet, that sterile fantasy is exactly what current medical AI agents are trained for.
 > 
