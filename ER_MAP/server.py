@@ -100,7 +100,13 @@ def _get_env() -> TriageEnv:
             groq_api_key=os.environ.get("GROQ_API_KEY", ""),
             nurse_api_key=os.environ.get("GROQ_NURSE_API_KEY", ""),
             patient_api_key=os.environ.get("GROQ_PATIENT_API_KEY", ""),
+            empathy_judge_api_key=os.environ.get("GROQ_EMPATHY_JUDGE_API_KEY", ""),
+            medical_judge_api_key=os.environ.get("GROQ_MEDICAL_JUDGE_API_KEY", ""),
             model=os.environ.get("ERMAP_MODEL", "llama-3.3-70b-versatile"),
+            nurse_model=os.environ.get("ERMAP_NURSE_MODEL"),
+            patient_model=os.environ.get("ERMAP_PATIENT_MODEL"),
+            empathy_judge_model=os.environ.get("ERMAP_EMPATHY_JUDGE_MODEL"),
+            medical_judge_model=os.environ.get("ERMAP_MEDICAL_JUDGE_MODEL"),
             render_mode=None,
         )
         logger.info("TriageEnv initialized.")

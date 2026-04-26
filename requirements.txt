@@ -3,22 +3,20 @@
 
 # --- Core ---
 gymnasium>=0.29.0
-# openenv-core 0.2.3 is the latest as of April 2026 (PyPI:
-# https://pypi.org/project/openenv-core/). The OpenEnv-compliant wrapper
-# under ER_MAP/envs/openenv_triage targets this minor version's API.
 openenv-core>=0.2.3
 
 # --- LLM Inference (Environment Actors) ---
 groq>=0.4.0
 
 # --- Training (Doctor RL Agent) ---
-torch>=2.0.0
-transformers>=4.38.0
-trl>=0.8.0
-peft>=0.9.0
-accelerate>=0.27.0
-datasets>=2.16.0
-unsloth>=2024.1
+# Note: Training deps are heavy; exclude if just running the server/demo
+# torch>=2.0.0
+# transformers>=4.38.0
+# trl>=0.8.0
+# peft>=0.9.0
+# accelerate>=0.27.0
+# datasets>=2.16.0
+# unsloth>=2024.1
 
 # --- Optional: Logging ---
 wandb>=0.16.0

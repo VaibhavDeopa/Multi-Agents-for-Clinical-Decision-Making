@@ -1,0 +1,44 @@
+# ER-MAP Triage - OpenEnv manifest
+#
+# Schema follows the canonical echo_env exemplar:
+# https://github.com/meta-pytorch/OpenEnv/blob/main/envs/echo_env/openenv.yaml
+#   spec_version: 1
+#   name: <env name>
+#   type: space            # HF Space deployment target
+#   runtime: fastapi
+#   app: <module>:<attr>   # FastAPI app reference relative to the image
+#   port: 8000
+#
+# OpenEnv 0.2.3 (latest as of April 2026) recognizes this manifest;
+# the ``openenv push`` CLI consumes it when deploying to Hugging Face
+# Spaces.
+
+spec_version: 1
+name: er_map_triage
+type: space
+runtime: fastapi
+
+# Inside the container the package is copied to /app/env, and the
+# Dockerfile launches uvicorn against ``server:app`` (this module).
+app: server:app
+port: 8000
+
+description: >
+  ER-MAP Triage: a multi-agent emergency-room simulation where a Doctor
+  RL policy interacts with Nurse / Patient / Judge LLM actors to
+  diagnose and treat domain-randomized scenarios. This is the
+  OpenEnv-compliant wrapper around the in-house Gymnasium TriageEnv
+  used to train ER-MAP's GRPO LoRA.
+
+metadata:
+  authors:
+    - ER-MAP Team
+  license: MIT
+  tags:
+    - medical
+    - multi-agent
+    - triage
+    - grpo
+    - rl
+    - llm
+  hackathon: "Meta PyTorch OpenEnv Hackathon 2026"

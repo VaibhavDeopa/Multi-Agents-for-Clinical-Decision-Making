@@ -14,12 +14,6 @@
 # =====================================================================
 
 # --- Environment / RL plumbing ---
-# IMPORTANT: do NOT pin torch here.
-# Kaggle's GPU image already ships with torch 2.10.0+cu128 (CUDA 12.8) which
-# is what bitsandbytes / unsloth / xformers are linked against. Pinning
-# `torch>=2.11.0` causes pip to upgrade torch to a generic CUDA-13 build,
-# which breaks `bitsandbytes` (libnvJitLink.so.13 missing) and prevents the
-# 4-bit Doctor LoRA from loading on T4 GPUs.
 gymnasium>=0.29.0
 openenv-core>=0.1.0
 
@@ -34,6 +28,11 @@ wandb>=0.17.0
 huggingface_hub>=0.25.0
 
 # --- Training stack: install Unsloth LAST. Unsloth's setup pins exact
+#     versions of bitsandbytes / xformers / triton matched to the
+#     Kaggle CUDA image, and re-installing those after Unsloth tends
+#     to break the build. ---
+unsloth==2024.12.4
+trl>=0.11.0,<0.15.0
 #     versions of bitsandbytes / xformers / triton matched to the
 #     Kaggle CUDA image, and re-installing those after Unsloth tends
 #     to break the build.

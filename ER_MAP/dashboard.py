@@ -616,6 +616,7 @@ def new_episode():
 
     # NOTE: ground_truth is intentionally NOT returned to the browser —
     # disease, emergency status, and personas live on the CMD terminal only.
+    # However, we now surface sanitized behavior traits for the 'God's View'.
     return jsonify({
         "status": "ok",
         "conversation": EPISODE_STATE["conversation"],
@@ -626,6 +627,11 @@ def new_episode():
         "phase_order": PHASE_ORDER,
         "difficulty": options.get("difficulty") or "random",
         "phase": phase,
+        "persona": {
+            "patient": gt.get("patient", {}),
+            "nurse": gt.get("nurse", {}),
+            "is_emergency": gt.get("disease", {}).get("is_emergency", False),
+        }
     })
 
 
@@ -974,6 +980,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
       const [phasesDone, setPhasesDone]       = useState([]);
       const [currentPhase, setCurrentPhase]   = useState(null);
       const [outcome, setOutcome]             = useState(null);
+      const [persona, setPersona]             = useState(null);
 
       // refs (audio + loop control — never trigger re-render)
       const audioQueueRef    = useRef([]);
@@ -1065,6 +1072,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
             body: JSON.stringify({ phase }),
           });
           const data = await res.json();
+          setPersona(data.persona);
           renderedCountRef.current = (data.conversation || []).length;
         } catch (e) {
           console.error('new_episode failed', e);
@@ -1160,7 +1168,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
               </div>
 
               {/* Open State */}
-              <div className={`absolute inset-0 w-[350px] p-6 flex flex-col transition-opacity duration-300 ${isSidebarOpen ? 'opacity-100 delay-100' : 'opacity-0 pointer-events-none'}`}>
+              <div className={`absolute inset-0 w-[350px] p-6 flex flex-col transition-opacity duration-300 overflow-y-auto custom-scrollbar ${isSidebarOpen ? 'opacity-100 delay-100' : 'opacity-0 pointer-events-none'}`}>
                 {/* Header + close */}
                 <div className="flex items-center justify-between mb-8 cursor-pointer group"
                      onClick={(e) => { e.stopPropagation(); setIsSidebarOpen(false); }}>
@@ -1201,7 +1209,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
                 </div>
 
                 {/* Section B: Clinical Phases */}
-                <div className="flex-1 flex flex-col">
+                <div className="mt-8 mb-8">
                   <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-4">Clinical Phases</h3>
                   <div className="space-y-3.5">
                     {PHASES.map(({ key, label }, i) => {
@@ -1224,6 +1232,52 @@ HTML_PAGE = r"""<!DOCTYPE html>
                     })}
                   </div>
                 </div>
+
+                {/* Section C: Agent Personas */}
+                {persona && (
+                  <div className="border-t border-slate-800/50 pt-6 pb-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-xs font-semibold text-slate-300 uppercase tracking-wider">Agent Personas</h3>
+                      {persona.is_emergency ? (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse shadow-[0_0_8px_rgba(248,113,113,0.3)]">🚨 EMERGENCY</span>
+                      ) : (
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Non-Emergency</span>
+                      )}
+                    </div>
+                    <div className="space-y-6">
+                      {/* Patient */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="w-3 h-3 text-teal-400" />
+                          <span className="text-[10px] font-bold text-teal-400/80 uppercase tracking-tight">Patient Traits</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(persona.patient).map(([k, v]) => (
+                            <div key={k} className="bg-slate-950/40 border border-slate-800/30 rounded-lg p-2">
+                              <div className="text-[9px] text-slate-500 uppercase leading-none mb-1">{k}</div>
+                              <div className="text-[10px] text-slate-300 font-medium leading-tight truncate">{v.replace(/_/g, ' ')}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      {/* Nurse */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Activity className="w-3 h-3 text-blue-400" />
+                          <span className="text-[10px] font-bold text-blue-400/80 uppercase tracking-tight">Nurse Traits</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {Object.entries(persona.nurse).map(([k, v]) => (
+                            <div key={k} className="bg-slate-950/40 border border-slate-800/30 rounded-lg p-2">
+                              <div className="text-[9px] text-slate-500 uppercase leading-none mb-1">{k}</div>
+                              <div className="text-[10px] text-slate-300 font-medium leading-tight truncate">{v.replace(/_/g, ' ')}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1245,7 +1299,7 @@ HTML_PAGE = r"""<!DOCTYPE html>
                     <button
                       onClick={startCase}
                       className="bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-semibold tracking-wider uppercase px-3 py-1.5 rounded-lg transition flex items-center gap-1.5 shadow-[0_4px_12px_rgba(99,102,241,0.3)]">
-                      <span>▶</span> Start Case
+                      Start Case
                     </button>
                   </>
                 ) : (

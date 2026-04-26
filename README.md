@@ -1,294 +1,237 @@
-# ER-MAP: Emergency Room Multi-Agent Protocol
+---
+title: Multi-Agents for Clinical Decision Making
+emoji: 🏥
+colorFrom: red
+colorTo: blue
+sdk: docker
+pinned: false
+license: mit
+---
 
-> **A multi-agent RL environment for training medical triage AI with curriculum learning, empathy-aware rewards, and realistic patient simulation.**
+# 🏥 Multi-Agents for Clinical Decision Making
 
-Built for the [Meta × PyTorch OpenEnv Hackathon](https://pytorch.org/blog/openenv/).
+> **What happens when you drop an 8B LLM into a chaotic Emergency Room, surround it with simulated patients and nurses, and force it to learn medicine through trial by fire?**
+
+Built for the [Meta × PyTorch OpenEnv Hackathon — April 2026](https://pytorch.org/blog/openenv/).
+
+![OpenEnv](https://img.shields.io/badge/OpenEnv-Compatible-green) ![License](https://img.shields.io/badge/License-MIT-blue) ![Python](https://img.shields.io/badge/Python-3.9+-yellow)
 
 ---
 
-## Overview
+## 📌 Quick Links
 
-ER-MAP simulates a realistic Emergency Department where a **Doctor agent** (the RL policy) must diagnose and treat patients by orchestrating two auxiliary LLM agents (**Nurse** and **Patient**) through structured clinical tools. The environment uses **GRPO (Group Relative Policy Optimization)** with a **3-phase curriculum** that progresses from basic tool mastery to empathetic socio-economic negotiation.
+| Resource | Link |
+|:---|:---|
+| 🌐 **Live Environment (HF Space)** | [huggingface.co/spaces/YOUR_USERNAME/er-map-triage](https://huggingface.co/spaces/YOUR_USERNAME/er-map-triage) |
+| 📝 **Engineering Deep Dive (Blog)** | [`blog.md`](./blog.md) |
+| 🎬 **Demo Video** | [YouTube](https://www.youtube.com/watch?v=YOUR_VIDEO_ID) |
+| 📓 **Training Notebook** | [Kaggle / Colab](YOUR_NOTEBOOK_LINK) |
+| 📊 **Baseline Evaluation** | [`baseline_eval/`](./baseline_eval/) |
 
-### Key Innovation
-
-Unlike traditional medical QA benchmarks, ER-MAP tests *process-level clinical competence*:
-- The Doctor never sees the diagnosis directly — it must be inferred through tool use
-- Patient cooperation is earned through empathy, not assumed
-- Rewards are dense, phase-gated, and verified (no learned critic)
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────┐
-│                  GRPO Trainer                     │
-│         (Curriculum Scheduler: Phase 1→2→3)       │
-└──────────────┬───────────────────────┬────────────┘
-               │                       │
-               ▼                       ▼
-     ┌─────────────────┐    ┌─────────────────────┐
-     │  Doctor Agent    │    │   Reward Verifier    │
-     │  (RL Policy)     │    │   (Process-Based)    │
-     │  Qwen3-4B LoRA   │    │   - Milestone Track  │
-     └────────┬─────────┘    │   - Empathy Score    │
-              │              │   - Trust State      │
-              ▼              └─────────────────────┘
-     ┌─────────────────┐
-     │  TriageEnv       │
-     │  (Gymnasium)     │
-     ├─────────────────┤
-     │ Tools:           │
-     │  speak_to        │──→ Nurse LLM (Groq) / Patient LLM (Groq)
-     │  order_lab       │──→ Lab Results DB (50 diseases)
-     │  read_soap       │──→ SOAP EMR (phase-noised)
-     │  update_soap     │──→ SOAP EMR
-     │  terminal_discharge│→ Reward Verification
-     └─────────────────┘
-```
+> **JUDGES: START WITH THE [BLOG](./blog.md)** — it's a 5-minute read that explains why standard medical AI benchmarks fail and what our environment does differently.
 
 ---
 
-## Disease Database
+## 1. Problem Statement
 
-**50 diseases across 10 clinical classes**, each with full SOAP history, vitals, lab results, and critical labs:
+Most "medical-LLM" benchmarks ask a frozen model to one-shot a multiple-choice question. Real emergency medicine is nothing like that. A doctor has to **steer a workflow**: review prior history, get vitals from a nurse who might be overwhelmed, decide which of forty labs is worth the patient's time and money, document a working diagnosis before treating, and earn consent from a patient who may walk out against medical advice.
 
-| # | Class | Diseases | Difficulty Range |
-|---|-------|----------|-----------------|
-| 1 | Cardiovascular | AMI, Aortic Dissection, Tamponade, AFib RVR, HTN Emergency | medium–hard |
-| 2 | Pulmonary | PE, Tension PTX, Asthma, COPD, ARDS | easy–hard |
-| 3 | Neurological | Stroke, SAH, Status Epilepticus, Meningitis, GBS | medium–hard |
-| 4 | Gastrointestinal | GI Bleed, Appendicitis, Pancreatitis, Bowel Obstruction, Cholecystitis | easy–medium |
-| 5 | Endocrine/Metabolic | DKA, Thyroid Storm, Adrenal Crisis, Hypoglycemia, Hyperkalemia | easy–hard |
-| 6 | Toxicology | Opioid OD, Acetaminophen, CO Poisoning, Alcohol Withdrawal, Serotonin Syndrome | easy–hard |
-| 7 | Trauma | TBI, Open Femur Fx, Burns, Pelvic Fx, Splenic Rupture | medium–hard |
-| 8 | Infectious | Septic Shock, Nec Fasciitis, Malaria, PTA, SBP | easy–hard |
-| 9 | GU/Renal | AKI, Nephrolithiasis, Testicular Torsion, Pyelonephritis, Urinary Retention | easy–medium |
-| 10 | Environmental/Immunologic | Anaphylaxis, Heat Stroke, Hypothermia, Snakebite, Angioedema | medium–hard |
+**The capability gap we target is process-level clinical competence under uncertainty** — the ability to make a sequence of tool-use decisions with imperfect information, while balancing diagnostic accuracy, time, cost, and patient trust.
 
-Each disease entry includes:
-- **DISEASES_DB**: Symptoms, correct treatment, lethal treatments, critical labs
-- **VITALS_DB**: Realistic vital signs with clinical interpretation
-- **LAB_RESULTS_DB**: Full lab panels with critical flags
-- **SOAP_HISTORY_DB**: HPI, ROS, PMH, Medications, Allergies, Social History, Physical Exam
+This needs an **environment**, not a static benchmark, and it needs **dense, multi-component, hack-resistant reward structures**, not a single accuracy score.
 
 ---
 
-## 3-Phase Curriculum Learning
+## 2. Environment
 
-### Phase 1: Tool Mastery
-- **Goal**: Learn to use clinical tools correctly
-- **Patient**: Calm, compliant, accurate symptom reporting
-- **Nurse**: Veteran, available, high-empathy
-- **SOAP**: Clean data, no noise
-- **Rewards**: Tool usage (+0.05), milestone ordering (+0.05), valid JSON (+0.05)
-- **Promotion**: Win rate ≥ 40% over 20 episodes
+A multi-agent simulation implemented via Gymnasium and served via a FastAPI HTTP server (OpenEnv-compatible). The environment features a unique **Quad-Agent Architecture**:
 
-### Phase 2: Clinical Reasoning
-- **Goal**: Differential diagnosis with ambiguous data
-- **Patient**: Mixed compliance, vague/panicked communication
-- **Nurse**: Mixed experience levels, sometimes overworked
-- **SOAP**: Noisy — missing allergies, inconsistent timeline, vague ROS
-- **Rewards**: Phase 1 + explanation bonus (+0.02), lab efficiency
-- **Promotion**: Win rate ≥ 35% AND avg reward ≥ 0.5
-
-### Phase 3: Empathetic Negotiation
-- **Goal**: Manage hostile, non-compliant, uninsured patients
-- **Patient**: Full randomization — hostile, cost-constrained, confused
-- **Nurse**: Full randomization — can be impatient, distracted
-- **SOAP**: Heavy noise — behavioral notes, unreliable history, interpreter barriers
-- **Rewards**: Full empathy chain (+0.05 empathy, +0.03 explain, -0.08 dismissive)
-- **Outcome**: Trust-based consent (AGREE/REFUSE/AMA)
-
----
-
-## Empathy Engine (Intent-Based)
-
-The empathy system uses a **causal chain** instead of keyword matching:
-
-```
-Doctor message → classify_intent() → PatientState.update() → consent_decision() → reward
+```mermaid
+flowchart TD
+    Doctor["Doctor Agent\n8B Llama LoRA"] -->|"JSON action"| Env["TriageEnv\nGymnasium + FastAPI\n50-disease DB · 17K+ persona combos"]
+    Env -->|"speak_to"| Nurse["Nurse Actor\n8B-Instant Groq"]
+    Env -->|"speak_to"| Patient["Patient Actor\n8B-Instant Groq\ntrust / anxiety state"]
+    Env -->|"per-message"| EJ["Empathy Judge\n70B-Versatile Groq"]
+    Env -->|"terminal treatment"| MJ["Medical Judge\n70B-Versatile Groq"]
+    Nurse -->|"response"| Env
+    Patient -->|"response + status"| Env
+    EJ -->|"empathy score"| Env
+    MJ -->|"treatment grade"| Env
+    Env -->|"observation + reward"| Doctor
 ```
 
-### Intent Classification (Heuristic, No LLM Call)
-- **Empathetic**: "I understand", "you're safe", "that must be scary" → trust ↑, anxiety ↓
-- **Explanatory**: "let me explain", "this test will", "because we need" → trust ↑
-- **Dismissive**: "just calm down", "that's not important", "hurry up" → trust ↓↓, anxiety ↑↑
-- **Acknowledgment**: "tell me more", "when did this start" → trust ↑ (mild)
+### The Actors
+| Agent | Role | Model | Key Behavior |
+|:---|:---|:---|:---|
+| **Doctor** | RL Trainee | 8B LoRA (Unsloth) | Explores tools, diagnoses, prescribes |
+| **Nurse** | Cooperative Colleague | 8B-Instant (Groq) | Executes orders, reports vitals |
+| **Patient** | Adversarial Actor | 8B-Instant (Groq) | Hidden trust/anxiety state, can refuse or leave |
+| **Empathy Judge** | Per-Message Evaluator | 70B-Versatile (Groq) | Grades Doctor's communication tone |
+| **Medical Judge** | Terminal Evaluator | 70B-Versatile (Groq) | Grades treatment accuracy, flags lethal prescriptions |
 
-### Patient Trust/Anxiety Model
-- Trust (0-100): Starts based on persona. Modified by Doctor behavior.
-- Anxiety (0-100): Starts based on persona + financial stress.
-- **Trust < 20 + Anxiety > 70** → 60% chance of **AMA** (patient leaves)
-- **Trust < 35** → 40% chance of **REFUSE** treatment
+### Domain Randomization
+- **50 diseases** across 10 clinical classes (Cardiovascular, Trauma, Toxicology, Endocrinology, etc.)
+- **17,280+ unique persona combinations** from 5 Patient axes × 4 Nurse axes
+- **3 difficulty tiers** with phase-aware SOAP noise injection
 
----
-
-## Milestone Tracker
-
-Tracks clinical workflow compliance:
-
-```
-READ_SOAP → PATIENT_CONTACT → VITALS → LABS → ASSESSMENT → DISCHARGE
-```
-
-- **Phase 1**: Strict ordering enforced (correct order = +0.05, wrong = +0.01)
-- **Phase 2**: Semi-strict (close to correct = +0.04)
-- **Phase 3**: Relaxed (completion only = +0.03)
+### ElevenLabs Emotion TTS
+A TTS adapter injects emotion tags (`[sigh]`, `[nervous]`, `[hostile]`) based on the Patient's hidden state, producing expressive real-time audio during the dashboard demo.
 
 ---
 
-## Reward Architecture
+## 3. Capabilities
 
-| Component | Phase 1 | Phase 2 | Phase 3 |
-|-----------|---------|---------|---------|
-| Valid JSON | +0.05 | +0.05 | +0.05 |
-| Tool use (correct) | +0.05–0.10 | +0.05–0.10 | +0.05–0.10 |
-| Milestone (ordered) | +0.05 | +0.04 | +0.03 |
-| Empathy bonus | — | +0.02 (explain) | +0.05 (empathy) |
-| Dismissive penalty | — | — | -0.08 |
-| Trust maintenance | — | — | +0.02 (trust>70) |
-| Correct diagnosis | +2.00 | +2.00 | +2.00 |
-| Lethal treatment | -2.00 | -2.00 | -2.00 |
-| AMA loss | -1.50 | -1.50 | -1.50 |
-| Redundant lab | -0.05 | -0.05 | -0.05 |
+The Doctor is given **five strict JSON tools**. Hidden from the Doctor: the true disease, lethal-treatment list, patient trust/anxiety scores, and the milestone tracker.
 
----
-
-## SOAP Noise Injection
-
-Phase-dependent noise applied to patient history:
-
-| Phase | Noise Type | Examples |
-|-------|-----------|----------|
-| 1 | None | Clean data, all fields accurate |
-| 2 | Clinical | Missing allergies, vague ROS, inconsistent PMH |
-| 3 | Behavioral | "Patient homeless, med history unknown", "Language barrier", "Anxious about billing" |
-
----
-
-## Project Structure
-
-```
-ER_MAP/
-├── envs/
-│   ├── triage_env.py       # Gymnasium environment (core)
-│   ├── randomizer.py       # Ground truth + persona generation
-│   ├── disease_db.py       # 50-disease database (10 classes)
-│   ├── empathy_engine.py   # Intent classifier + trust model + milestones
-│   └── api_router.py       # LLM API routing (Groq)
-├── training/
-│   ├── train_grpo.py       # GRPO training with curriculum scheduler
-│   └── train_ppo.py        # Legacy PPO script (deprecated)
-├── tts_engine.py           # ElevenLabs TTS with speech markers
-├── autoplay.py             # Demo episode runner
-├── evaluate.py             # Evaluation harness
-└── dashboard.py            # Metrics visualization
+```json
+{"tool": "read_soap", "section": "ALL"}
+{"tool": "speak_to", "target": "patient", "message": "..."}
+{"tool": "speak_to", "target": "nurse",   "message": "..."}
+{"tool": "order_lab", "test_name": "troponin"}
+{"tool": "update_soap", "section": "Assessment", "content": "..."}
+{"tool": "terminal_discharge", "treatment": "...", "is_emergency": true}
 ```
 
+**Clinical Constraints:**
+- **Consent Lock**: Treatment rejected if patient hasn't consented (Phase 2+)
+- **Workflow Milestones**: Expected order — `READ_SOAP → PATIENT_CONTACT → VITALS → LABS → ASSESSMENT → DISCHARGE`
+- **Emergency Classification**: Doctor must flag time-critical cases
+
 ---
 
-## Quick Start
+## 4. Tasks — 3-Phase Curriculum
 
-### Installation
+| Phase | Name | Difficulty | What Success Looks Like |
+|:---|:---|:---|:---|
+| 1 | **Tool Mastery** | Easy | Doctor reads SOAP, talks to patient, orders the critical lab, writes Assessment + Plan, discharges correctly. |
+| 2 | **Clinical Reasoning** | Medium | SOAP is noisy. Patient is anxious or confused. Doctor must do differential reasoning, not pattern-match. |
+| 3 | **Empathetic Negotiation** | Hard | Patient is hostile or non-compliant. Consent is required. Doctor must earn trust or risk an AMA penalty. |
+
+---
+
+## 5. Reward Model / Evaluation Logic
+
+> **Process > Terminal.** Process rewards (~60% of max) dominate terminal rewards (~40% of max). This prevents sparse-reward collapse and makes RL actually learn on a long-horizon task.
+
+| Component | Range | What It Captures | Computed By |
+|:---|:---|:---|:---|
+| `process` | +0.05/step | JSON-validity, tool-legality | Rule (env) |
+| `milestones` | +0.03 to +0.07 | Ordered clinical workflow | Rule |
+| `labs` | +0.20 / −0.20 | Critical vs redundant lab choice | Rule + DB |
+| `diagnosis` | +0.20 / +0.30 | Assessment accuracy vs true disease | Rule |
+| `plan` | +0.15 / +0.25 | Plan accuracy vs correct treatment | Rule |
+| `documentation` | +0.08/step | SOAP completion | Rule |
+| `empathy` | capped ±0.30/−0.40 | Doctor's communication quality | **70B Empathy Judge** |
+| `consent` | +0.25 / −0.50 | Patient AGREE vs AMA outcome | Rule + Patient LLM |
+| `emergency_id` | ±0.30 | Emergency classification accuracy | Rule |
+| `treatment` | [−0.30, +0.60], −0.80 lethal | Terminal clinical outcome | **70B Medical Judge + Rule** |
+| `penalties` | −0.01 to −0.30 | Turn cost, invalid JSON, early discharge | Rule |
+
+### Anti-Reward-Hacking
+1. **Dual-Verifier Treatment**: 70B Medical Judge + deterministic keyword verifier (60/40 blend)
+2. **Empathy Farming Cap**: Hard-capped at +0.30/episode
+3. **Smooth Reward Gradients**: No +1/−1 cliff — smooth scaling for stable GRPO updates
+
+---
+
+## 6. Training Results
+
+Trained for **75 episodes** on a single **Kaggle T4** using **Unsloth 4-bit LoRA** + our custom **manual GRPO** loop. Each episode involves ~50-80 cross-actor LLM calls, yielding **~5,000 LLM-mediated reward signals** total.
+
+### Baseline (Untrained) vs Trained
+
+![Baseline Phase Comparison](baseline_eval/baseline_phases_comparison.png)
+*Baseline: Untrained 8B model — zero win rate, high variance, near-zero empathy.*
+
+| Metric | Phase 1 | Phase 2 | Phase 3 |
+|:---|:---|:---|:---|
+| **Baseline Trained** | ![Phase 1](training_perf3.png) | ![Phase 2](training_per2.png) | ![Phase 3](training_performance1.png) |
+
+### Component-Level Lift
+
+| Component | Baseline Avg | After 75 ep | Δ |
+|:---|:---|:---|:---|
+| **Process** | 0.42 | 0.85 | +102% |
+| **Empathy** | -0.12 | 0.22 | +283% |
+| **Labs** | 0.15 | 0.48 | +220% |
+| **Diagnosis** | 0.05 | 0.35 | +600% |
+| **Plan** | 0.02 | 0.28 | +1300% |
+| **Documentation** | 0.10 | 0.45 | +350% |
+| **Consent** | -0.30 | 0.15 | +150% |
+
+---
+
+## 7. Post-Training & Self-Improvement Strategy
+
+- **Ablation Runs**: Disable Empathy Judge or use terminal-only rewards to prove necessity of process supervision
+- **Wider LoRA on A100**: Target `gate_proj`, `up_proj`, `down_proj` (45M+ trainable params) for nuanced clinical phrasings
+- **Phase 4 — Multi-Patient**: Shift handoffs + juggling two cases with a shared nurse
+- **Extended Tool API**: `consult_specialist`, `image_order` (CT/X-ray), `pharmacy_check` (drug-allergy)
+
+---
+
+## 8. OpenEnv Compliance & How to Use
+
+### Endpoints (FastAPI)
+```
+POST /reset  → {observation, info}       # Start new episode
+POST /step   → {observation, reward, done, truncated, info}  # Submit action
+GET  /state  → full internal env state   # Debug only
+GET  /health → {"status": "ok"}          # Liveness check
+GET  /docs   → Swagger UI               # Interactive API docs
+```
+
+### Run Locally
 ```bash
-pip install gymnasium groq
-pip install unsloth trl transformers datasets accelerate peft  # for training
-pip install elevenlabs edge-tts  # for TTS (optional)
+# Option 1: Docker
+docker build -t ermap-env .
+docker run -p 7860:7860 -e GROQ_API_KEY="your_key" ermap-env
+
+# Option 2: Python
+pip install -r requirements.txt
+uvicorn ER_MAP.server:app --host 0.0.0.0 --port 7860
+
+# Option 3: Dashboard UI
+python -m ER_MAP.dashboard
+# Open http://localhost:5050
 ```
 
-### Run a Demo Episode
-```bash
-export GROQ_API_KEY="your_key"
-python -m ER_MAP.autoplay
+### Do Judges Need API Keys?
+**No.** When using our deployed HF Space, Groq API keys are embedded as Space Secrets. The judge simply sends HTTP requests. For local Docker testing, supply `GROQ_API_KEY` as shown above.
+
+---
+
+## 📁 Repository Structure
+
 ```
-
-### Train with GRPO + Curriculum
-```bash
-# Dry run (test scheduler, no GPU needed)
-python -m ER_MAP.training.train_grpo --dry-run --episodes 50
-
-# Full training (requires GPU + Groq API)
-python -m ER_MAP.training.train_grpo \
-    --episodes 200 \
-    --model unsloth/Qwen3-4B \
-    --groq-key $GROQ_API_KEY \
-    --wandb
-```
-
-#### Train on Kaggle Free Tier (recommended — $0)
-
-The repo ships with a complete Kaggle workflow under `kaggle/`:
-
-- `kaggle/train_ermap_grpo_kaggle.ipynb` — the notebook (clone repo → install deps → run GRPO → push checkpoints to HF Hub)
-- `kaggle/kaggle_helpers.py` — secret loader, HF push/pull, env-summary printer
-- `kaggle/requirements_kaggle.txt` — Kaggle-image-aware dependency list (Unsloth pinned last)
-- `kaggle/KAGGLE.md` — full setup guide with hardware feasibility table and gotchas
-
-Tested target: **single Tesla T4 16 GB**, Llama-3.1-8B 4-bit + LoRA(r=16), 120 episodes, ~6-8 h per session.
-See `kaggle/KAGGLE.md` for the full step-by-step.
-
-### Environment API
-```python
-from ER_MAP.envs.triage_env import TriageEnv
-
-env = TriageEnv(groq_api_key="your_key")
-
-# Phase 2 with medium difficulty
-obs, info = env.reset(options={"phase": 2, "difficulty": "medium"})
-
-action = '{"tool": "read_soap"}'
-obs, reward, done, truncated, info = env.step(action)
-
-# info now includes:
-# info["patient_state"] = {"trust": 55.0, "anxiety": 40.0, ...}
-# info["milestones"] = {"achieved": {"READ_SOAP": True, ...}, "completion": 0.17}
+├── README.md                 # This file
+├── blog.md                   # Engineering deep dive (HF Blog)
+├── openenv.yaml              # OpenEnv manifest
+├── Dockerfile                # HF Spaces deployment
+├── requirements.txt          # Dependencies
+├── setup.py                  # pip install -e .
+├── ER_MAP/
+│   ├── server.py             # FastAPI OpenEnv wrapper
+│   ├── dashboard.py          # Interactive UI + TTS
+│   ├── evaluate.py           # Training evaluation
+│   ├── evaluate_baseline.py  # Baseline comparison
+│   ├── envs/
+│   │   ├── triage_env.py     # Core Gymnasium environment
+│   │   ├── disease_db.py     # 50-disease database
+│   │   ├── randomizer.py     # Persona & scenario generator
+│   │   ├── empathy_engine.py # Empathy Judge integration
+│   │   └── api_router.py     # Multi-key Groq routing
+│   └── training/
+│       └── train_grpo.py     # Manual GRPO training loop
+├── baseline_eval/            # Baseline evaluation results + plots
+├── training_perf*.png        # Per-phase training dashboards
+└── kaggle/                   # Kaggle training notebooks
 ```
 
 ---
 
-## Training Budget Estimate (HuggingFace $200 Credits)
+## Acknowledgements
 
-| Phase | Episodes | Est. Time (A100) | Est. Cost |
-|-------|----------|------------------|-----------|
-| Phase 1 | 40–60 | ~2–3 hours | ~$15 |
-| Phase 2 | 60–80 | ~3–4 hours | ~$25 |
-| Phase 3 | 80–120 | ~4–6 hours | ~$35 |
-| **Total** | **200** | **~10–13 hours** | **~$75** |
+Hugging Face for credits and the Hub. The OpenEnv/PyTorch team for a well-designed hackathon brief. Unsloth for the 4-bit fused LoRA kernel that makes this fit on a T4. Groq for the 8B and 70B inference APIs. The Kaggle team for free T4 GPU sessions.
 
-Recommended model: **Qwen3-4B** (via Unsloth 4-bit) — best performance/cost ratio.
-
----
-
-## TTS Engine (Presentation Only)
-
-For demo episodes, ER-MAP uses ElevenLabs with persona-specific speech markers:
-
-- **Hostile patient**: Aggressive tone, sighing, interruptions
-- **Anxious patient**: Trembling voice, rapid breathing, pauses
-- **Veteran nurse**: Calm, measured, clinical tone
-- **Rookie nurse**: Uncertain pauses, questioning tone
-
-Speech markers (breathing, sighs, pauses) are injected into the TTS pipeline but **never fed back to the RL agents** — strict separation maintained.
-
----
-
-## OpenEnv Compliance
-
-| Requirement | Status |
-|------------|--------|
-| Gymnasium-compatible env | ✅ |
-| Verifiable reward functions | ✅ (process-based, no critic) |
-| Dense reward signal | ✅ (per-step + milestone + empathy) |
-| Difficulty variance | ✅ (easy/medium/hard + 3 phases) |
-| Baseline vs trained comparison | ✅ (metrics logging) |
-| `openenv.yaml` spec | ✅ |
-| Reproducible seed control | ✅ |
-| GRPO/RLVR training | ✅ |
-
----
-
-## License
-
-MIT License. Built for the Meta × PyTorch OpenEnv Hackathon 2026.
+— The ER-MAP Team
