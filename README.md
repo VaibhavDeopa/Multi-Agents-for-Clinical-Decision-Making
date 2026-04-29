@@ -25,7 +25,7 @@ Built for the [Meta × PyTorch OpenEnv Hackathon — April 2026](https://pytorch
 |  **Training Notebook** | [Kaggle](https://www.kaggle.com/code/aman99123/grpo-rl-trainer) |
 | **Baseline Evaluation** | [`baseline_eval/`](./baseline_eval/) |
 
-> **Suggestion: START WITH THE [BLOG](./blog.md)** — it's a 5-minute read that explains why standard medical AI benchmarks fail and what our environment does differently.
+> **Suggestion: START WITH THE [BLOG](./blog.md)** — it's a 5-minute read that explains why standard medical AI benchmarks fail and what our environment does differently in a non-technical interesting manner.
 
 ---
 
